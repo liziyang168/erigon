@@ -1466,7 +1466,8 @@ func (sdb *IntraBlockState) SetCode(addr accounts.Address, code []byte, reason t
 		}
 		stateObject.setCode(seed)
 	}
-	written, err := stateObject.SetCode(canonical, !sdb.hasWrite(addr, CodePath, accounts.NilKey), reason)
+	firstCodeWriteThisTx := !sdb.hasWrite(addr, CodePath, accounts.NilKey)
+	written, err := stateObject.SetCode(canonical, firstCodeWriteThisTx, reason)
 	if err != nil {
 		return err
 	}
@@ -1477,7 +1478,11 @@ func (sdb *IntraBlockState) SetCode(addr accounts.Address, code []byte, reason t
 		// then resets within the same tx). Case (2) is disabled for newly
 		// created stateObjects: original holds the pre-creation snapshot,
 		// and deleting CodePath/CodeHashPath writes would corrupt the trie.
-		matchesOriginal := !stateObject.newlyCreated && codeHash == origHash
+		// Case (2) also requires an earlier code write in this tx: on the first
+		// code write baseCodeHash is the tx-start value (case 1 governs) and
+		// origHash may lag to the pre-block value, which would wrongly drop the
+		// clearing of code an earlier tx set.
+		matchesOriginal := !stateObject.newlyCreated && !firstCodeWriteThisTx && codeHash == origHash
 		if codeHash == baseCodeHash || matchesOriginal {
 			if dbg.TraceTransactionIO && (sdb.trace || dbg.TraceAccount(addr.Handle())) {
 				fmt.Printf("%d (%d.%d) SetCode SKIP (matches base) %x codeHash=%x baseHash=%x originalHash=%x codeLen=%d\n",
